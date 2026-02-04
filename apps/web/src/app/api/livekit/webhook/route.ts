@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { WebhookReceiver } from "@livekit/server-sdk";
+import { WebhookReceiver } from "livekit-server-sdk";
 import { processEgressRecording } from "@vpp/processing";
 
 export const runtime = "nodejs";

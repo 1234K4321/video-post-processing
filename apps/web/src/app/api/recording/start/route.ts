@@ -3,7 +3,7 @@ import {
   EgressClient,
   EncodedFileOutput,
   EncodedFileType
-} from "@livekit/server-sdk";
+} from "livekit-server-sdk";
 import { z } from "zod";
 import { s3Bucket } from "@vpp/processing";
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AccessToken } from "@livekit/server-sdk";
+import { AccessToken } from "livekit-server-sdk";
 import { v4 as uuidv4 } from "uuid";
 import { startSession } from "@vpp/processing";
 

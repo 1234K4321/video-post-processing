@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { EgressClient } from "@livekit/server-sdk";
+import { EgressClient } from "livekit-server-sdk";
 import { z } from "zod";
 
 export const runtime = "nodejs";

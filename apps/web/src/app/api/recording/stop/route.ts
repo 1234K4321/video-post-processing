@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { EgressClient } from "livekit-server-sdk";
 import { z } from "zod";
+import { toHttpUrl } from "../../../../lib/livekit-url";
 
 export const runtime = "nodejs";
 
@@ -9,9 +10,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-  const serverUrl = process.env.LIVEKIT_URL;
+  const apiKey = process.env.LIVEKIT_API_KEY?.trim();
+  const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
+  const serverUrl = process.env.LIVEKIT_URL?.trim();
 
   if (!apiKey || !apiSecret || !serverUrl) {
     return NextResponse.json({ error: "Missing env vars" }, { status: 500 });
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const egressClient = new EgressClient(serverUrl, apiKey, apiSecret);
+  const egressClient = new EgressClient(toHttpUrl(serverUrl), apiKey, apiSecret);
   const info = await egressClient.stopEgress(body.data.egressId);
 
   return NextResponse.json({

@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import {
   EgressClient,
   EncodedFileOutput,
-  EncodedFileType
+  EncodedFileType,
+  S3Upload
 } from "livekit-server-sdk";
 import { z } from "zod";
 import { s3Bucket } from "@vpp/processing";
+import { toHttpUrl } from "../../../../lib/livekit-url";
 
 export const runtime = "nodejs";
 
@@ -15,12 +17,12 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const apiKey = process.env.LIVEKIT_API_KEY;
-  const apiSecret = process.env.LIVEKIT_API_SECRET;
-  const serverUrl = process.env.LIVEKIT_URL;
-  const region = process.env.AWS_REGION;
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const apiKey = process.env.LIVEKIT_API_KEY?.trim();
+  const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
+  const serverUrl = process.env.LIVEKIT_URL?.trim();
+  const region = process.env.AWS_REGION?.trim();
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
 
   if (!apiKey || !apiSecret || !serverUrl || !region || !accessKeyId || !secretAccessKey) {
     return NextResponse.json({ error: "Missing env vars" }, { status: 500 });
@@ -31,21 +33,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const egressClient = new EgressClient(serverUrl, apiKey, apiSecret);
+  const egressClient = new EgressClient(toHttpUrl(serverUrl), apiKey, apiSecret);
   const filepath = `sessions/${body.data.sessionId}/raw-${Date.now()}.mp4`;
 
-  const fileOutput: EncodedFileOutput = {
+  const fileOutput = new EncodedFileOutput({
     fileType: EncodedFileType.MP4,
     filepath,
-    s3: {
-      accessKey: accessKeyId,
-      secret: secretAccessKey,
-      region,
-      bucket: s3Bucket
+    output: {
+      case: "s3",
+      value: new S3Upload({
+        accessKey: accessKeyId,
+        secret: secretAccessKey,
+        region,
+        bucket: s3Bucket
+      })
     }
-  };
+  });
 
-  const info = await egressClient.startRoomCompositeEgress(body.data.roomName, fileOutput, {
+  const info = await egressClient.startRoomCompositeEgress(body.data.roomName, { file: fileOutput }, {
     layout: "grid",
     audioOnly: false,
     videoOnly: false

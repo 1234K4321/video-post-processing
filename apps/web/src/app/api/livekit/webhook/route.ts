@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
   let event;
   try {
-    event = receiver.receive(body, authHeader ?? "");
+    event = await receiver.receive(body, authHeader ?? "");
   } catch (err) {
     return NextResponse.json({ error: "Invalid webhook" }, { status: 401 });
   }

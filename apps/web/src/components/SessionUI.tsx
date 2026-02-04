@@ -41,10 +41,12 @@ export const SessionUI = () => {
   const [flags, setFlags] = useState<SafetyFlag[]>([]);
   const [connect, setConnect] = useState(false);
   const [endAt, setEndAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const safetyStopRef = useRef<(() => void) | null>(null);
 
   const handleStart = async () => {
     setStatus("starting");
+    setError(null);
     const created = await createSession();
     setSession(created);
     setConnect(true);
@@ -90,12 +92,17 @@ export const SessionUI = () => {
 
   const handleRoomConnected = async () => {
     if (!session) return;
-    const recording = await startRecording({
-      sessionId: session.sessionId,
-      roomName: session.roomName
-    });
-    setEgressId(recording.egressId);
-    setStatus("recording");
+    try {
+      const recording = await startRecording({
+        sessionId: session.sessionId,
+        roomName: session.roomName
+      });
+      setEgressId(recording.egressId);
+      setStatus("recording");
+    } catch (err) {
+      setStatus("connected");
+      setError(err instanceof Error ? err.message : "Failed to start recording.");
+    }
   };
 
   return (
@@ -114,6 +121,7 @@ export const SessionUI = () => {
             </span>
           )}
         </div>
+        {error && <span className="flag">{error}</span>}
       </header>
 
       <div className="grid">
@@ -166,7 +174,20 @@ export const SessionUI = () => {
             video={true}
             audio={true}
             onConnected={handleRoomConnected}
-            onDisconnected={() => setStatus("ended")}
+            onDisconnected={(reason) => {
+              setStatus("ended");
+              if (reason) {
+                setError(`Disconnected: ${String(reason)}`);
+              }
+            }}
+            onError={(err) => {
+              setStatus("error");
+              setError(err?.message ?? "LiveKit connection error.");
+            }}
+            onMediaDeviceFailure={(err) => {
+              setStatus("error");
+              setError(err?.message ?? "Media device error.");
+            }}
             style={{ marginTop: 16 }}
           >
             <RoomAudioRenderer />

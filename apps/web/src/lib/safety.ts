@@ -1,0 +1,94 @@
+import * as nsfwjs from "nsfwjs";
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-backend-webgl";
+import { sendSafetyEvent } from "./livekit";
+
+export type SafetyFlag = {
+  type: string;
+  score: number;
+  threshold: number;
+  flagged: boolean;
+  details?: Record<string, unknown>;
+};
+
+export type SafetyMonitorOptions = {
+  sessionId: string;
+  video: HTMLVideoElement;
+  intervalMs?: number;
+  onFlag?: (flags: SafetyFlag[]) => void;
+};
+
+const NUDITY_THRESHOLD = 0.7;
+
+export const startSafetyMonitor = async ({
+  sessionId,
+  video,
+  intervalMs = 2000,
+  onFlag
+}: SafetyMonitorOptions) => {
+  await tf.setBackend("webgl");
+  await tf.ready();
+  const model = await nsfwjs.load();
+
+  let active = true;
+  const tick = async () => {
+    if (!active || video.readyState < 2) return;
+    const predictions = await model.classify(video);
+    const findScore = (label: string) =>
+      predictions.find((item) => item.className === label)?.probability ?? 0;
+    const nudityScore = Math.max(findScore("Porn"), findScore("Hentai"), findScore("Sexy"));
+
+    const flags: SafetyFlag[] = [
+      {
+        type: "nudity",
+        score: nudityScore,
+        threshold: NUDITY_THRESHOLD,
+        flagged: nudityScore >= NUDITY_THRESHOLD,
+        details: { predictions }
+      },
+      {
+        type: "suspicious_behavior",
+        score: 0,
+        threshold: 0.7,
+        flagged: false
+      },
+      {
+        type: "ai_bot",
+        score: 0,
+        threshold: 0.7,
+        flagged: false
+      },
+      {
+        type: "offensive",
+        score: 0,
+        threshold: 0.7,
+        flagged: false
+      },
+      {
+        type: "harassment",
+        score: 0,
+        threshold: 0.7,
+        flagged: false
+      },
+      {
+        type: "violence",
+        score: 0,
+        threshold: 0.7,
+        flagged: false
+      }
+    ];
+
+    if (flags.some((flag) => flag.flagged)) {
+      const timestamp = new Date().toISOString();
+      await sendSafetyEvent({ sessionId, timestamp, flags });
+      onFlag?.(flags);
+    }
+  };
+
+  const timer = setInterval(tick, intervalMs);
+
+  return () => {
+    active = false;
+    clearInterval(timer);
+  };
+};

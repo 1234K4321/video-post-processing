@@ -9,7 +9,14 @@ const bodySchema = z.object({
   timestamp: z.string(),
   flags: z.array(
     z.object({
-      type: z.string(),
+      type: z.enum([
+        "nudity",
+        "suspicious_behavior",
+        "ai_bot",
+        "offensive",
+        "harassment",
+        "violence"
+      ]),
       score: z.number(),
       threshold: z.number(),
       flagged: z.boolean(),

@@ -1,6 +1,7 @@
 import * as nsfwjs from "nsfwjs";
 import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-webgl";
+import "@tensorflow/tfjs-backend-webgpu";
 import { sendSafetyEvent } from "./livekit";
 
 export type SafetyFlag = {
@@ -20,14 +21,23 @@ export type SafetyMonitorOptions = {
 
 const NUDITY_THRESHOLD = 0.7;
 
+const initSafety = async () => {
+  try {
+    await tf.setBackend("webgpu");
+  } catch (err) {
+    await tf.setBackend("webgl");
+  }
+  await tf.ready();
+  console.log("Safety Filter running on:", tf.getBackend());
+};
+
 export const startSafetyMonitor = async ({
   sessionId,
   video,
   intervalMs = 2000,
   onFlag
 }: SafetyMonitorOptions) => {
-  await tf.setBackend("webgl");
-  await tf.ready();
+  await initSafety();
   const model = await nsfwjs.load();
 
   let active = true;
@@ -45,36 +55,6 @@ export const startSafetyMonitor = async ({
         threshold: NUDITY_THRESHOLD,
         flagged: nudityScore >= NUDITY_THRESHOLD,
         details: { predictions }
-      },
-      {
-        type: "suspicious_behavior",
-        score: 0,
-        threshold: 0.7,
-        flagged: false
-      },
-      {
-        type: "ai_bot",
-        score: 0,
-        threshold: 0.7,
-        flagged: false
-      },
-      {
-        type: "offensive",
-        score: 0,
-        threshold: 0.7,
-        flagged: false
-      },
-      {
-        type: "harassment",
-        score: 0,
-        threshold: 0.7,
-        flagged: false
-      },
-      {
-        type: "violence",
-        score: 0,
-        threshold: 0.7,
-        flagged: false
       }
     ];
 

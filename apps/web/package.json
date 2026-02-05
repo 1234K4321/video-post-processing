@@ -13,6 +13,7 @@
     "@livekit/components-react": "^2.4.0",
     "@tensorflow/tfjs": "^3.21.0",
     "@tensorflow/tfjs-backend-webgl": "^3.21.0",
+    "@tensorflow/tfjs-backend-webgpu": "^3.21.0",
     "@vpp/processing": "*",
     "livekit-client": "^2.7.3",
     "livekit-server-sdk": "^2.6.0",

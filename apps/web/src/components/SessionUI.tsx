@@ -186,7 +186,11 @@ export const SessionUI = () => {
             }}
             onMediaDeviceFailure={(err) => {
               setStatus("error");
-              setError(err?.message ?? "Media device error.");
+              const detail =
+                typeof err === "string"
+                  ? err
+                  : (err as { reason?: string })?.reason ?? "Media device error.";
+              setError(detail);
             }}
             style={{ marginTop: 16 }}
           >

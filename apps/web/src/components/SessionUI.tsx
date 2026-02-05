@@ -189,7 +189,9 @@ export const SessionUI = () => {
               const detail =
                 typeof err === "string"
                   ? err
-                  : (err as { reason?: string })?.reason ?? "Media device error.";
+                  : err && typeof err === "object" && "reason" in err
+                    ? String((err as { reason?: string }).reason ?? "Media device error.")
+                    : "Media device error.";
               setError(detail);
             }}
             style={{ marginTop: 16 }}

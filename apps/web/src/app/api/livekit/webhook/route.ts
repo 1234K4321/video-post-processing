@@ -32,8 +32,8 @@ export async function POST(request: Request) {
   if (event.event === "egress_ended") {
     const egressInfo = event.egressInfo;
     const file = egressInfo?.fileResults?.[0];
-    const fileLocation = file?.location ?? egressInfo?.file?.location;
-    const fileName = file?.filename ?? egressInfo?.file?.filename;
+    const fileLocation = file?.location;
+    const fileName = file?.filename;
     const key = fileName ?? fileLocation;
     const sessionId = extractSessionId(key ?? "") ?? "unknown";
 

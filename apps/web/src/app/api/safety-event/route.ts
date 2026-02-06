@@ -11,6 +11,7 @@ const bodySchema = z.object({
     z.object({
       type: z.enum([
         "nudity",
+        "profanity",
         "suspicious_behavior",
         "ai_bot",
         "offensive",

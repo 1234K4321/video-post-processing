@@ -1,6 +1,7 @@
 export type SafetyFlag = {
   type:
     | "nudity"
+    | "profanity"
     | "suspicious_behavior"
     | "ai_bot"
     | "offensive"

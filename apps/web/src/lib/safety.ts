@@ -20,6 +20,7 @@ export type SafetyMonitorOptions = {
 };
 
 const NUDITY_THRESHOLD = 0.7;
+const PROFANITY_THRESHOLD = 0.6;
 
 const initSafety = async () => {
   try {
@@ -46,7 +47,11 @@ export const startSafetyMonitor = async ({
     const predictions = await model.classify(video);
     const findScore = (label: string) =>
       predictions.find((item) => item.className === label)?.probability ?? 0;
-    const nudityScore = Math.max(findScore("Porn"), findScore("Hentai"), findScore("Sexy"));
+    const pornScore = findScore("Porn");
+    const hentaiScore = findScore("Hentai");
+    const sexyScore = findScore("Sexy");
+    const nudityScore = Math.max(pornScore, hentaiScore);
+    const profanityScore = sexyScore;
 
     const flags: SafetyFlag[] = [
       {
@@ -54,6 +59,13 @@ export const startSafetyMonitor = async ({
         score: nudityScore,
         threshold: NUDITY_THRESHOLD,
         flagged: nudityScore >= NUDITY_THRESHOLD,
+        details: { predictions }
+      },
+      {
+        type: "profanity",
+        score: profanityScore,
+        threshold: PROFANITY_THRESHOLD,
+        flagged: profanityScore >= PROFANITY_THRESHOLD,
         details: { predictions }
       }
     ];

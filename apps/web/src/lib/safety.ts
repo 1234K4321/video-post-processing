@@ -50,8 +50,10 @@ export const startSafetyMonitor = async ({
     const pornScore = findScore("Porn");
     const hentaiScore = findScore("Hentai");
     const sexyScore = findScore("Sexy");
-    const nudityScore = Math.max(pornScore, hentaiScore);
-    const profanityScore = sexyScore;
+    const nudityScore = Math.max(pornScore, hentaiScore, sexyScore);
+    const rudeScore = Math.max(findScore("Rude"), findScore("Profanity"), findScore("Obscene gesture"));
+    const weaponScore = Math.max(findScore("Weapon"), findScore("Gun"));
+    const profanityScore = Math.max(rudeScore, weaponScore);
 
     const flags: SafetyFlag[] = [
       {

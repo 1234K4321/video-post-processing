@@ -7,7 +7,8 @@ export type SafetyFlag = {
     | "harassment"
     | "violence"
     | "face_liveness"
-    | "voice_liveness";
+    | "voice_liveness"
+    | "profanity";
   score: number;
   threshold: number;
   flagged: boolean;

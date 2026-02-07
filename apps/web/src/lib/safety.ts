@@ -1,7 +1,3 @@
-import * as nsfwjs from "nsfwjs";
-import * as tf from "@tensorflow/tfjs";
-import "@tensorflow/tfjs-backend-webgl";
-import "@tensorflow/tfjs-backend-webgpu";
 import { sendSafetyEvent } from "./livekit";
 
 export type SafetyFlag = {
@@ -21,22 +17,11 @@ export type SafetyMonitorOptions = {
   onWarning?: (message: string) => void;
 };
 
-const NUDITY_THRESHOLD = 0.7;
 const LIVENESS_THRESHOLD = 0.6; // Min score to be considered live
 
 // Track violation durations
 let faceSuspiciousStartTime: number | null = null;
 let voiceSuspiciousStartTime: number | null = null;
-
-const initSafety = async () => {
-  try {
-    await tf.setBackend("webgpu");
-  } catch (err) {
-    await tf.setBackend("webgl");
-  }
-  await tf.ready();
-  console.log("Safety Filter running on:", tf.getBackend());
-};
 
 export const startSafetyMonitor = async ({
   sessionId,
@@ -46,9 +31,6 @@ export const startSafetyMonitor = async ({
   onKick,
   onWarning
 }: SafetyMonitorOptions) => {
-  await initSafety();
-  const nsfwModel = await nsfwjs.load();
-
   // Initialize Workers
   const faceWorker = new Worker(new URL('./workers/face.worker.ts', import.meta.url), { type: 'module' });
   const voiceWorker = new Worker(new URL('./workers/voice.worker.ts', import.meta.url), { type: 'module' });
@@ -104,43 +86,47 @@ export const startSafetyMonitor = async ({
   const tick = async () => {
     if (!active || video.readyState < 2) return;
     
-    // --- 1. NSFW Check (Existing) ---
-    // (We run this less frequently if needed, but keeping logic here)
+    // --- 1. Cloud Moderation Check (Replaces NSFWJS) ---
     if (!running) {
         running = true;
         try {
-            const predictions = await nsfwModel.classify(video);
-            const findScore = (label: string) =>
-                predictions.find((item) => item.className === label)?.probability ?? 0;
-            const pornScore = findScore("Porn");
-            const hentaiScore = findScore("Hentai");
-            const nudityScore = Math.max(pornScore, hentaiScore);
-
             const flags: SafetyFlag[] = [];
 
-            if (nudityScore >= NUDITY_THRESHOLD) {
-                flags.push({
-                    type: "nudity",
-                    score: nudityScore,
-                    threshold: NUDITY_THRESHOLD,
-                    flagged: true,
-                    details: { predictions }
-                });
-            }
-
-            // --- 2. Face Liveness Check ---
-            // Send frame to worker
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
+            // Capture frame for cloud analysis
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext("2d");
+            
             if (ctx) {
                 ctx.drawImage(video, 0, 0);
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+
+                // Call Cloud API
+                try {
+                    const res = await fetch("/api/safety/detect-moderation", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ image: dataUrl }),
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.flags && Array.isArray(data.flags)) {
+                            flags.push(...data.flags);
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Moderation API failed", err);
+                }
+
+                // Send bitmap to Face Worker (Parallel to cloud check)
                 const bitmap = await createImageBitmap(canvas);
                 faceWorker.postMessage({ imageBitmap: bitmap, timestamp: Date.now() }, [bitmap]);
             }
 
-            // Check Face State
+            // --- 2. Face Liveness Check ---
+            // (Worker logic handled asynchronously via postMessage above, results accumulated below)
             const now = Date.now();
             let faceFlagged = false;
             

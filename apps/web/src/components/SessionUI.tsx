@@ -47,6 +47,7 @@ export const SessionUI = () => {
   const handleStart = async () => {
     setStatus("starting");
     setError(null);
+    setEgressId(null);
     const created = await createSession();
     setSession(created);
     setConnect(true);
@@ -60,6 +61,7 @@ export const SessionUI = () => {
     setConnect(false);
     setStatus("ended");
     setEndAt(null);
+    setEgressId(null);
   };
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export const SessionUI = () => {
 
   useEffect(() => {
     const handler = () => {
-      if (!egressId) return;
+      if (!egressId || status !== "recording") return;
       const payload = JSON.stringify({ egressId });
       navigator.sendBeacon(
         "/api/recording/stop",

@@ -24,10 +24,25 @@ export async function POST(request: Request) {
   }
 
   const egressClient = new EgressClient(toHttpUrl(serverUrl), apiKey, apiSecret);
-  const info = await egressClient.stopEgress(body.data.egressId);
-
-  return NextResponse.json({
-    status: info.status,
-    egressId: info.egressId
-  });
+  try {
+    const info = await egressClient.stopEgress(body.data.egressId);
+    return NextResponse.json({
+      status: info.status,
+      egressId: info.egressId
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    const code = typeof err === "object" && err ? (err as { code?: string }).code : undefined;
+    if (
+      message.includes("EGRESS_COMPLETE") ||
+      message.includes("failed_precondition") ||
+      code === "failed_precondition"
+    ) {
+      return NextResponse.json({
+        status: "EGRESS_COMPLETE",
+        egressId: body.data.egressId
+      });
+    }
+    throw err;
+  }
 }

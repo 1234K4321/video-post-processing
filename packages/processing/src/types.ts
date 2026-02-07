@@ -5,7 +5,9 @@ export type SafetyFlag = {
     | "ai_bot"
     | "offensive"
     | "harassment"
-    | "violence";
+    | "violence"
+    | "face_liveness"
+    | "voice_liveness";
   score: number;
   threshold: number;
   flagged: boolean;

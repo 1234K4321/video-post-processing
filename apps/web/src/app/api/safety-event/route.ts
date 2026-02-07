@@ -15,7 +15,9 @@ const bodySchema = z.object({
         "ai_bot",
         "offensive",
         "harassment",
-        "violence"
+        "violence",
+        "face_liveness",
+        "voice_liveness"
       ]),
       score: z.number(),
       threshold: z.number(),

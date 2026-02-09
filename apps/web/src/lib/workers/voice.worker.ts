@@ -10,54 +10,89 @@ env.useBrowserCache = true;
 let classifier: any = null;
 
 const initialize = async () => {
-    // Model selection: A lightweight audio classification model suitable for spoofing/deepfake detection
-    // For this example, we'll use a generic audio classifier as placeholder for a specialized anti-spoofing model
-    // In production, you would point to a specific finetuned model e.g., 'microsoft/wavlm-base-plus-sv' or a custom ONNX one
     try {
-        // Using a small audio classification model to detect 'real' vs 'synthetic'
-        // Ideally this should be a model trained on ASVspoof data
-        classifier = await pipeline("audio-classification", "Xenova/ast-finetuned-audioset-10-10-0.4593", {
+        // Using "Gustking/wav2vec2-large-xlsr-deepfake-audio-classification" as requested
+        // This is a dedicated deepfake classification model
+        classifier = await pipeline("audio-classification", "Gustking/wav2vec2-large-xlsr-deepfake-audio-classification", {
             device: 'webgpu',
         });
+        
         self.postMessage({ type: "LOADED" });
     } catch (e) {
-        console.error("Failed to load voice model", e);
-        // Fallback to CPU if WebGPU fails
+        console.error("Failed to load deepfake model", e);
         try {
-            classifier = await pipeline("audio-classification", "Xenova/ast-finetuned-audioset-10-10-0.4593", {
+             classifier = await pipeline("audio-classification", "Gustking/wav2vec2-large-xlsr-deepfake-audio-classification", {
                 device: 'cpu',
             });
             self.postMessage({ type: "LOADED" });
         } catch (e2) {
-             console.error("Failed to load voice model on fallback", e2);
+             console.error("Failed fallback load", e2);
         }
     }
 };
 
 initialize();
 
+// Buffer for accumulating PCM chunks
+let audioBuffer: Float32Array = new Float32Array(0);
+const TARGET_SAMPLE_RATE = 16000;
+const PROCESSING_WINDOW = TARGET_SAMPLE_RATE * 2; // 2 seconds of audio
+
 self.onmessage = async (e) => {
-    if (!classifier) return;
+    const { type, audioData } = e.data;
+    if (type !== 'CHECK' || !classifier) return;
 
-    const { audioData } = e.data; // Float32Array of audio
-
-    try {
-        // Run inference
-        // Note: Real antispoofing needs raw waveform
-        const output = await classifier(audioData);
+    if (audioData) {
+        // Append new data
+        const newBuffer = new Float32Array(audioBuffer.length + audioData.length);
+        newBuffer.set(audioBuffer);
+        newBuffer.set(audioData, audioBuffer.length);
+        audioBuffer = newBuffer;
         
-        // This is a placeholder logic. Real ASV models return [bonafide, spoof] 
-        // We simulate a score here for the sake of the infrastructure
-        // Assume 'Speech' probability is a proxy for 'naturalness' in this generic model
-        const speechScore = output.find((x: any) => x.label === "Speech")?.score || 0.5;
+        // Process if we have enough data (e.g. 2s)
+        if (audioBuffer.length >= PROCESSING_WINDOW) {
+            const chunkToProcess = audioBuffer.slice(0, PROCESSING_WINDOW);
+             // Shift buffer
+            audioBuffer = audioBuffer.slice(PROCESSING_WINDOW);
+            
+            try {
+                // Run inference on the dedicated deepfake classifier
+                const output = await classifier(chunkToProcess);
+                
+                // Typical output for audio-classification:
+                // [{ label: 'real', score: 0.99 }, { label: 'fake', score: 0.01 }]
+                // OR [{ label: 'bonafide', score: ... }, ...] depending on model mapping.
+                
+                // Inspecting the model card or testing shows the label mapping.
+                // Assuming labels like 'real'/'fake' or similar.
+                // We'll search for 'real' or 'bonafide'.
+                const realLabel = output.find((x: any) => 
+                    x.label.toLowerCase().includes('real') || 
+                    x.label.toLowerCase().includes('bonafide')
+                );
+                
+                // If the model uses 'spoof'/'fake', we might invert the score.
+                const fakeLabel = output.find((x: any) =>
+                    x.label.toLowerCase().includes('fake') ||
+                    x.label.toLowerCase().includes('spoof')
+                );
 
-        self.postMessage({
-            type: "RESULT",
-            score: speechScore, // Higher means more likely real speech
-            isReal: speechScore > 0.7 
-        });
+                let realScore = 0.5;
+                if (realLabel) {
+                    realScore = realLabel.score;
+                } else if (fakeLabel) {
+                    realScore = 1.0 - fakeLabel.score;
+                }
 
-    } catch (err) {
-        console.error("Voice worker error", err);
+                self.postMessage({
+                    type: "RESULT",
+                    score: realScore,
+                    isReal: realScore > 0.5 // Threshold can be tuned
+                });
+
+            } catch (err) {
+                 console.error("Inference error", err);
+            }
+        }
     }
 };

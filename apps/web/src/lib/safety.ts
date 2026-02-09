@@ -11,6 +11,7 @@ export type SafetyFlag = {
 export type SafetyMonitorOptions = {
   sessionId: string;
   video: HTMLVideoElement;
+  audioTrack?: MediaStreamTrack; // Optional direct track
   intervalMs?: number;
   onFlag?: (flags: SafetyFlag[]) => void;
   onKick?: (reason: string) => void;
@@ -26,6 +27,7 @@ let voiceSuspiciousStartTime: number | null = null;
 export const startSafetyMonitor = async ({
   sessionId,
   video,
+  audioTrack,
   intervalMs = 2000,
   onFlag,
   onKick,
@@ -57,31 +59,54 @@ export const startSafetyMonitor = async ({
 
   // Audio Capture Setup
   let audioContext: AudioContext;
-  let scriptProcessor: ScriptProcessorNode;
+  let workletNode: AudioWorkletNode;
   let source: MediaStreamAudioSourceNode;
-  
-  // NOTE: We assume video element has a stream with audio track
-  if (video.srcObject && (video.srcObject as MediaStream).getAudioTracks().length > 0) {
-      const stream = video.srcObject as MediaStream;
-      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      source = audioContext.createMediaStreamSource(stream);
-      scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-      
-      scriptProcessor.onaudioprocess = (e) => {
-          if (!active) return;
-          const inputData = e.inputBuffer.getChannelData(0);
-          // Downsample or send as is? Transformer.js handles resampling usually, but sending F32Array is fine.
-          // We limit frequency of sending to worker to save resources (e.g., every ~1s)
-          if (Math.random() < 0.1) { // Basic throttling
-              voiceWorker.postMessage({
-                  audioData: inputData
-              });
-          }
-      };
-      
-      source.connect(scriptProcessor);
-      scriptProcessor.connect(audioContext.destination); // destination is needed for chrome to play/process
-  }
+
+  const setupAudio = async () => {
+    try {
+        const targetTrack = audioTrack || (video.srcObject as MediaStream)?.getAudioTracks()[0];
+        
+        if (targetTrack) {
+            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            
+            // Resume context if suspended (browser auto-play policy)
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            // Add Worklet
+            try {
+                // Ensure correct path to public file
+                await audioContext.audioWorklet.addModule('/pcm-processor.js');
+            } catch (err) {
+                console.warn("Failed to load audio worklet", err);
+                return;
+            }
+
+            const stream = new MediaStream([targetTrack]);
+            source = audioContext.createMediaStreamSource(stream);
+            workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+
+            // Handle PCM data from worklet
+            workletNode.port.onmessage = (event) => {
+                 if (!active) return;
+                 // Rate limit / buffer could be added here
+                 // Forward to worker
+                 voiceWorker.postMessage({
+                     type: 'CHECK',
+                     audioData: event.data
+                 });
+            };
+
+            source.connect(workletNode);
+            workletNode.connect(audioContext.destination); // Needed for processing to flow? Usually audioWorklet doesn't need dest if we just tap, but for liveness we might process silence
+        }
+    } catch (e) {
+        console.error("Audio Setup Error", e);
+    }
+  };
+
+  setupAudio();
 
   const tick = async () => {
     if (!active || video.readyState < 2) return;
@@ -185,7 +210,6 @@ export const startSafetyMonitor = async ({
             } else {
                 voiceSuspiciousStartTime = null;
             }
-
 
             if (flags.some((flag) => flag.flagged)) {
                 const timestamp = new Date().toISOString();
